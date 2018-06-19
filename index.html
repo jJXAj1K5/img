@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>awdawdaw</title>
+<script>
+var imageData;
+var fileData;
+
+function uploadImage() {
+	document.getElementById('loading').style.display = 'block';
+
+	var file = document.getElementById("imageInput").files[0];
+	var reader = new FileReader();
+
+	reader.onload = function(f) {
+		var img = new Image();
+	img.onload = function() {
+
+		var canvas = document.createElement("canvas");
+	    canvas.width = img.width;
+	    canvas.height = img.height;
+
+	    var ctx = canvas.getContext("2d");
+	    ctx.drawImage(img, 0, 0);
+	    imageData = ctx.getImageData(0, 0, img.width, img.height);
+
+	    var fileSize = Math.floor(imageData.height * imageData.width * 6 / 8) - 260;
+	    if(fileSize < 1024) document.getElementById("maxSize").innerHTML = "Максимальный размер файла:<br>" + fileSize + " байт"
+	    else if(fileSize < 1048576) document.getElementById("maxSize").innerHTML = "Максимальный размер файла:<br>" + (fileSize/1024).toFixed(2) + " Кб"
+	    else document.getElementById("maxSize").innerHTML = "Максимальный размер файла:<br>" + (fileSize/1024/1024).toFixed(2) + " Мб"
+		document.getElementById('loading').style.display = 'none';
+	}
+
+	img.src = f.target.result
+	}
+	reader.readAsDataURL(file);
+
+}
+
+function uploadFile() {
+	document.getElementById('loading').style.display = 'block';
+
+  	var file = document.getElementById("fileInput").files[0];
+  	var reader = new FileReader();
+    reader.onload = function() {
+    	var b = new Int8Array(this.result);
+    	var a = [(b.length + 260 & 0xFFFFFFFF) >> 24, (b.length + 260 & 0xFFFFFF) >> 16, (b.length + 260 & 0xFFFF) >> 8, b.length + 260 & 0xFF];
+
+    	for(var i=0; i<(256-file.name.length); i++) {
+		    a.push(0);
+		}
+    	for(var i=0; i<file.name.length; i++) {
+		    a.push(file.name.charCodeAt(i));
+		}
+		a = new Int8Array(a);
+    	fileData = new Int8Array(a.length + b.length);
+		fileData.set(a);
+		fileData.set(b, a.length);
+
+		document.getElementById('loading').style.display = 'none';
+    }
+    reader.readAsArrayBuffer(file);
+
+}
+
+function concat(){
+	var filePosCounter = 0;
+	var imagePosCounter = 0;
+	var bitPosCounter = 3;
+	var hexArr = [0x3, 0xF, 0x3F, 0xFF];
+
+	var fileLen = fileData.length * 4 + Math.floor(fileData.length * 4 / 3);
+
+	for (var i = 0; i < fileLen; i++) {
+		if (imagePosCounter == 3){
+			imagePosCounter = 0;
+			continue;
+		}
+		if(bitPosCounter == -1){
+			bitPosCounter = 3;
+			filePosCounter++;
+		}
+		imageData.data[i] = (imageData.data[i] & 0xFC) | ((fileData[filePosCounter] & hexArr[bitPosCounter] ) >> bitPosCounter*2);
+		imagePosCounter++;
+		bitPosCounter--;
+	}
+
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    ctx.putImageData(imageData, 0, 0);
+
+	var image = new Image();
+	image.onload = function(){
+		document.getElementById('loading').style.display = 'none';
+		window.scrollTo( 0, 1000);
+	}
+	image.id = 'image'
+    image.src = canvas.toDataURL();
+    document.body.appendChild(image);
+}
+
+function uploadPack(){
+	document.getElementById('loading').style.display = 'block';
+	document.getElementById('error').style.display = 'none';
+	try{
+		var file = document.getElementById("packInput").files[0];
+		var reader = new FileReader();
+
+		reader.onload = function(f) {
+			var img = new Image();
+		img.onload = function() {
+		try{
+			var canvas = document.createElement("canvas");
+		    canvas.width = img.width;
+		    canvas.height = img.height;
+
+		    var ctx = canvas.getContext("2d");
+		    ctx.drawImage(img, 0, 0);
+		    var data = ctx.getImageData(0, 0, img.width, img.height).data;
+		    var newData = [];
+
+		    var counter = 3;
+		    var temp = [0,0,0,0]
+	    	for (var i = 0; i < 1386; i++) {
+	    		if((i+1)%4 == 0) continue;
+	    		temp[counter] = (data[i] & 0x3) << counter*2;
+	    		if(counter == 0){
+	    			counter = 4;
+	    			newData.push(temp[0] | temp[1] | temp[2] | temp[3])
+	    		}
+	    		counter--;
+	    	}
+	    	var dataLen = ((newData[0] << 24) | (newData[1] << 16) | (newData[2] << 8) | (newData[3])) * 4;
+	    	dataLen = dataLen + Math.floor(dataLen/3);
+	    	var fileName = '';
+	    	for (var i = 4; i < 260; i++) {
+	    		if(newData[i] != 0) fileName += String.fromCharCode(newData[i]);
+	    	}
+
+		    var dataPos = 0;
+		    var counter = 3;
+
+		    var newData = new Uint8Array(((newData[0] << 24) | (newData[1] << 16) | (newData[2] << 8) | (newData[3])) -260);
+
+	    	for (var i = 1386; i < dataLen; i++) {
+	    		if((i+1)%4 == 0) continue;
+	    		temp[counter] = (data[i] & 0x3) << counter*2;
+	    		if(counter == 0){
+	    			counter = 4;
+	    			newData[dataPos] = (temp[0] | temp[1] | temp[2] | temp[3]);
+	    			dataPos++;
+	    		}
+	    		counter--;
+	    	}
+
+	    	var blob = new Blob([newData]);
+		    var link = document.createElement('a');
+		    link.href = window.URL.createObjectURL(blob);
+		    link.download = fileName;
+		    link.click();
+
+			document.getElementById('loading').style.display = 'none';
+
+			} catch (err) {
+				document.getElementById('loading').style.display = 'none';
+				document.getElementById('error').style.display = 'block';
+			}
+		}
+
+		img.src = f.target.result
+		}
+		reader.readAsDataURL(file);
+	} catch (err) {
+		document.getElementById('error').style.display = 'block';
+		document.getElementById('loading').style.display = 'none';
+	}
+}
+
+</script>
+	<style>
+
+		html {
+			width: 100%;
+			height: 100%;
+		}
+
+		body {
+			font-family: Verdana;
+			color: rgba(255,255,255,0.8);
+			width: 100%;
+			height: 100%;
+			margin: 0;
+			padding: 0;
+		}
+
+		label {
+			margin: 15px 0 5px 0;
+		}
+
+		h1 {
+			text-align: center;
+		}
+
+		button {
+			margin: 25px 0 0 0;
+			padding: 5px 0;
+		}
+
+		span {
+			margin: 10px 0 0 0;
+		}
+
+
+		#parent {
+			display: flex;
+			width: 100%;
+			height: 100%;
+		}
+
+		#parent > div {
+	        flex: 1;
+	    }
+
+	    #inner {
+			min-height: 50%;
+			width: 300px;
+		    display: flex;
+		    flex-direction: column;
+	    }
+
+		#left {
+			background-color: #4834d4;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+
+		#right {
+			background-color: #f0932b;
+			display: flex;
+			justify-content: center;
+			align-items: center;	
+		}
+
+		#error {
+			color: #000;
+			display: none;
+		}
+		#sign{
+			position: absolute;
+			bottom: 25px;
+			right: 25px; 
+		}
+		#loading{
+			position: absolute;
+			top: 10px;
+			right: 10px; 
+			height: 70px;
+			width: 70px;
+			display: none;
+		}
+		#image {
+			display: inline-block;
+			max-width: 400px;
+			max-height: 400px;
+		}
+
+	</style>
+</head>
+
+<body>
+
+  <div id="parent">
+    <div id="left">
+    	<div id="inner">
+    		<h1>Запаковать</h1>
+    		<label for="imageInput">Изображение:</label>
+			<input id="imageInput" type="file" onchange="uploadImage();">
+    		<label for="fileInput">Файл:</label>
+			<input id="fileInput" type="file" onchange="uploadFile();"> 
+			<button onclick="document.getElementById('loading').style.display = 'block';concat();">Запаковать</button>
+			<span id="maxSize"></span>
+    	</div>
+    </div>
+    <div id="right">
+    	<div id="inner">
+    		<h1>Распаковать</h1>
+    		<label for="packInput">Изображение:</label>
+			<input id="packInput" type="file" onchange="uploadPack();"> 
+			<span id="error">ЕГГОГ</span>
+    	</div>
+    </div>
+    <span id="sign">jJXAj1K5</span>
+    <img id="loading" src="http://gifimage.net/wp-content/uploads/2018/04/loading-gif-transparent-background-1.gif"	>
+</body>
+</html>
